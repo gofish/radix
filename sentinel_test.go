@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"testing"
 	. "testing"
 	"time"
 
@@ -416,6 +417,38 @@ func TestSentinelClientsAddrs(t *T) {
 		}
 	}
 
+}
+
+func TestSentinelDelayDial(t *testing.T) {
+	stub := newSentinelStub(
+		"127.0.0.1:9736", // primAddr
+		[]string{"127.0.0.2:9736", "127.0.0.3:9736"},                    // secAddrs
+		[]string{"127.0.0.1:29736", "127.0.0.2:9736", "127.0.0.3:9736"}, // sentAddrs
+	)
+
+	dialErr := fmt.Errorf("dial error")
+	poolFn := func(network, addr string) (Client, error) {
+		return nil, dialErr
+	}
+
+	scc, err := NewSentinel(
+		"stub",
+		stub.sentAddrs,
+		SentinelConnFunc(stub.newConn),
+		SentinelPoolFunc(poolFn),
+		SentinelDelayDial(true),
+	)
+	require.Nil(t, err)
+
+	primAddr, _ := scc.Addrs()
+	client, err := scc.Client(primAddr)
+	require.Equal(t, dialErr, err)
+	require.Nil(t, client)
+
+	out := ""
+	key := randStr()
+	err = scc.Do(Cmd(&out, "GET", key))
+	require.Equal(t, dialErr, err)
 }
 
 func TestSentinelSecondaryRead(t *T) {

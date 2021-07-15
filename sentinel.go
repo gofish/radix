@@ -11,6 +11,7 @@ import (
 type sentinelOpts struct {
 	cf ConnFunc
 	pf ClientFunc
+	dd bool
 }
 
 // SentinelOpt is an optional behavior which can be applied to the NewSentinel
@@ -36,6 +37,14 @@ func SentinelConnFunc(cf ConnFunc) SentinelOpt {
 func SentinelPoolFunc(pf ClientFunc) SentinelOpt {
 	return func(so *sentinelOpts) {
 		so.pf = pf
+	}
+}
+
+// SentinelDelayDial can be used to delay dialing the primary until the first call
+// to Do() or to Client() using the primary address.
+func SentinelDelayDial(delayDial bool) SentinelOpt {
+	return func(so *sentinelOpts) {
+		so.dd = delayDial
 	}
 }
 
@@ -202,8 +211,15 @@ func (sc *Sentinel) dialSentinel() (Conn, error) {
 // Action will likely fail and return an error.
 func (sc *Sentinel) Do(a Action) error {
 	sc.l.RLock()
+	addr := sc.primAddr
 	client := sc.clients[sc.primAddr]
 	sc.l.RUnlock()
+	if client == nil {
+		var err error
+		if client, err = sc.Client(addr); err != nil {
+			return err
+		}
+	}
 	return client.Do(a)
 }
 
@@ -411,7 +427,7 @@ func (sc *Sentinel) setClients(newPrimAddr string, newClients map[string]Client)
 
 	// if the primary doesn't have a client created, create it here outside the
 	// lock where it won't block everything else
-	if newClients[newPrimAddr] == nil {
+	if newClients[newPrimAddr] == nil && !sc.so.dd {
 		var err error
 		if newClients[newPrimAddr], err = sc.so.pf("tcp", newPrimAddr); err != nil {
 			return err
