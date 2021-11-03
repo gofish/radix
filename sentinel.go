@@ -296,6 +296,7 @@ func (sc *Sentinel) clientInner(addr string) (Client, error) {
 	} else {
 		var ok bool
 		if client, ok = sc.clients[addr]; !ok {
+			sc.l.RUnlock()
 			return nil, errUnknownAddress
 		}
 	}
