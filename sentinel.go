@@ -181,11 +181,12 @@ func (sc *Sentinel) testEvent(event string) {
 
 func (sc *Sentinel) dialSentinel() (Conn, error) {
 	sc.l.RLock()
-	defer sc.l.RUnlock()
+	sentAddrs := sc.sentinelAddrs
+	sc.l.RUnlock()
 
 	var conn Conn
 	var err error
-	for addr := range sc.sentinelAddrs {
+	for addr := range sentAddrs {
 		conn, err = sc.so.cf("tcp", addr)
 		if err == nil {
 			return conn, nil
